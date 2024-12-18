@@ -4,13 +4,14 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
 import { synthesizeSpeech, transcribeSpeech } from "@/api/googleCloud";
-
-const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id";
+import { Input } from "./ui/input";
+import { Button } from "./ui/button";
 
 export const Chatbot = () => {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [webhookUrl, setWebhookUrl] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -27,6 +28,11 @@ export const Chatbot = () => {
 
   const handleSendMessage = async (content: string) => {
     try {
+      if (!webhookUrl) {
+        toast.error("Please enter your Zapier webhook URL first");
+        return;
+      }
+
       const userMessage: ChatMessageType = {
         id: Date.now().toString(),
         type: "user",
@@ -37,23 +43,24 @@ export const Chatbot = () => {
       setMessages((prev) => [...prev, userMessage]);
       setIsLoading(true);
 
-      const response = await fetch(WEBHOOK_URL, {
+      const response = await fetch(webhookUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: content }),
+        mode: "no-cors", // Handle CORS issues
+        body: JSON.stringify({ 
+          message: content,
+          timestamp: new Date().toISOString(),
+          triggered_from: window.location.origin,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error("Failed to get response");
-      }
-
-      const data = await response.json();
+      // Since we're using no-cors, we'll assume success and show a message
       const botMessage: ChatMessageType = {
         id: (Date.now() + 1).toString(),
         type: "bot",
-        content: data.response || "Sorry, I couldn't process that.",
+        content: "Message sent to webhook successfully. Check your Zap's history to confirm it was triggered.",
         timestamp: new Date(),
       };
 
@@ -67,7 +74,7 @@ export const Chatbot = () => {
       }
     } catch (error) {
       console.error("Message Error:", error);
-      toast.error("Failed to send message. Please try again.");
+      toast.error("Failed to send message. Please check your webhook URL and try again.");
     } finally {
       setIsLoading(false);
     }
@@ -118,8 +125,29 @@ export const Chatbot = () => {
 
   return (
     <div className="flex h-[600px] w-full max-w-2xl flex-col rounded-lg border bg-chatbot-background shadow-lg">
-      <div className="flex-none border-b bg-white p-4">
+      <div className="flex-none border-b bg-white p-4 space-y-4">
         <h2 className="text-lg font-semibold">Chat Assistant</h2>
+        <div className="flex gap-2">
+          <Input
+            type="text"
+            placeholder="Enter your Zapier webhook URL"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+            className="flex-1"
+          />
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              if (webhookUrl) {
+                toast.success("Webhook URL saved");
+              } else {
+                toast.error("Please enter a webhook URL");
+              }
+            }}
+          >
+            Save
+          </Button>
+        </div>
       </div>
 
       <div
