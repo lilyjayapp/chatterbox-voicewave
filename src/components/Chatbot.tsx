@@ -5,7 +5,7 @@ import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
 import { synthesizeSpeech, transcribeSpeech } from "@/api/googleCloud";
 
-const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id"; // Replace with your actual Make.com webhook URL
+const WEBHOOK_URL = "https://hook.eu2.make.com/0fd6yuwrhlju7mff5e33mc3xib80pm7y";
 
 export const Chatbot = () => {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
@@ -42,7 +42,7 @@ export const Chatbot = () => {
         headers: {
           "Content-Type": "application/json",
         },
-        mode: "no-cors", // Handle CORS issues
+        mode: "no-cors",
         body: JSON.stringify({ 
           message: content,
           timestamp: new Date().toISOString(),
@@ -50,7 +50,6 @@ export const Chatbot = () => {
         }),
       });
 
-      // Since we're using no-cors, we'll assume success and show a message
       const botMessage: ChatMessageType = {
         id: (Date.now() + 1).toString(),
         type: "bot",
