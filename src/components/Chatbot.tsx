@@ -5,6 +5,8 @@ import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
 
 const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id";
+const ELEVEN_LABS_VOICE_ID = "EXAVITQu4vr4xnSDxMaL"; // Sarah's voice
+const ELEVEN_LABS_MODEL = "eleven_multilingual_v2";
 
 export const Chatbot = () => {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
@@ -12,6 +14,7 @@ export const Chatbot = () => {
   const [isRecording, setIsRecording] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
@@ -22,6 +25,39 @@ export const Chatbot = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const playAudioResponse = async (text: string) => {
+    try {
+      const response = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${ELEVEN_LABS_VOICE_ID}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "xi-api-key": process.env.ELEVEN_LABS_API_KEY || "",
+          },
+          body: JSON.stringify({
+            text,
+            model_id: ELEVEN_LABS_MODEL,
+            voice_settings: {
+              stability: 0.5,
+              similarity_boost: 0.5,
+            },
+          }),
+        }
+      );
+
+      if (!response.ok) throw new Error("Failed to generate speech");
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+      const audio = new Audio(audioUrl);
+      await audio.play();
+    } catch (error) {
+      toast.error("Failed to generate speech");
+      console.error("TTS Error:", error);
+    }
+  };
 
   const handleSendMessage = async (content: string) => {
     const userMessage: ChatMessageType = {
@@ -54,6 +90,11 @@ export const Chatbot = () => {
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      
+      // Generate speech for bot's response if the original input was voice
+      if (isRecording) {
+        await playAudioResponse(botMessage.content);
+      }
     } catch (error) {
       toast.error("Failed to send message. Please try again.");
     } finally {
@@ -63,34 +104,39 @@ export const Chatbot = () => {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const audioChunks: Blob[] = [];
+      // Initialize speech recognition
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      const recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
+      recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        handleSendMessage(transcript);
       };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
-        // Here you would typically send the audioBlob to a speech-to-text service
-        // For now, we'll just simulate it
-        handleSendMessage("Voice message received");
+      recognition.onerror = (event) => {
+        toast.error("Speech recognition error. Please try again.");
+        setIsRecording(false);
       };
 
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
       setIsRecording(true);
     } catch (error) {
       toast.error("Failed to access microphone. Please check your permissions.");
+      setIsRecording(false);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
       setIsRecording(false);
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
   };
 
