@@ -3,7 +3,6 @@ import { ChatMessage as ChatMessageType } from "@/types/chat";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
-import { synthesizeSpeech, transcribeSpeech } from "../api/googleCloud";
 
 const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id";
 
@@ -57,12 +56,9 @@ export const Chatbot = () => {
 
       setMessages((prev) => [...prev, botMessage]);
       
-      // Generate speech for bot response
+      // Use Web Speech API for text-to-speech
       try {
-        const audioContent = await synthesizeSpeech(botMessage.content);
-        const audioBlob = new Blob([audioContent], { type: 'audio/mp3' });
-        const audio = new Audio(URL.createObjectURL(audioBlob));
-        await audio.play();
+        await synthesizeSpeech(botMessage.content);
       } catch (error) {
         console.error("TTS Error:", error);
         toast.error("Failed to generate speech response");
@@ -86,10 +82,8 @@ export const Chatbot = () => {
 
       mediaRecorder.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        const buffer = await audioBlob.arrayBuffer();
-        
         try {
-          const transcript = await transcribeSpeech(Buffer.from(buffer));
+          const transcript = await transcribeSpeech(audioBlob);
           if (transcript) {
             handleSendMessage(transcript);
           } else {

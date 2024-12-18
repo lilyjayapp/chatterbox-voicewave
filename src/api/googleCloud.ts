@@ -1,37 +1,42 @@
-import { SpeechClient } from '@google-cloud/speech';
-import { TextToSpeechClient } from '@google-cloud/text-to-speech';
-
-// Initialize clients
-const speechClient = new SpeechClient();
-const ttsClient = new TextToSpeechClient();
-
-export const synthesizeSpeech = async (text: string) => {
-  const request = {
-    input: { text },
-    voice: { languageCode: 'en-US', ssmlGender: 'NEUTRAL' },
-    audioConfig: { audioEncoding: 'MP3' },
-  };
-
-  const [response] = await ttsClient.synthesizeSpeech(request);
-  return response.audioContent;
+// Using Web Speech API for browser-compatible speech services
+export const synthesizeSpeech = async (text: string): Promise<ArrayBuffer> => {
+  return new Promise((resolve, reject) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => {
+      // Since Web Speech API doesn't provide audio buffer,
+      // we're returning an empty buffer for type compatibility
+      resolve(new ArrayBuffer(0));
+    };
+    utterance.onerror = (error) => {
+      reject(error);
+    };
+    window.speechSynthesis.speak(utterance);
+  });
 };
 
-export const transcribeSpeech = async (audioContent: Buffer) => {
-  const audio = {
-    content: audioContent.toString('base64'),
-  };
-  const config = {
-    encoding: 'LINEAR16',
-    sampleRateHertz: 16000,
-    languageCode: 'en-US',
-  };
-  const request = {
-    audio,
-    config,
-  };
+export const transcribeSpeech = async (audioContent: Blob): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+    recognition.lang = 'en-US';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-  const [response] = await speechClient.recognize(request);
-  return response.results
-    ?.map(result => result.alternatives?.[0]?.transcript)
-    .join('\n');
+    recognition.onresult = (event) => {
+      const transcript = event.results[0][0].transcript;
+      resolve(transcript);
+    };
+
+    recognition.onerror = (error) => {
+      reject(error);
+    };
+
+    // Convert blob to audio element and play it
+    const audio = new Audio(URL.createObjectURL(audioContent));
+    audio.onended = () => {
+      recognition.stop();
+    };
+    
+    recognition.start();
+    audio.play().catch(reject);
+  });
 };
