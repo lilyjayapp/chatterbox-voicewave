@@ -3,6 +3,7 @@ import { ChatMessage as ChatMessageType } from "@/types/chat";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
+import { synthesizeSpeech, transcribeSpeech } from "../api/googleCloud";
 
 const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id";
 
@@ -11,7 +12,8 @@ export const Chatbot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const recognitionRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
@@ -55,21 +57,12 @@ export const Chatbot = () => {
 
       setMessages((prev) => [...prev, botMessage]);
       
-      // Synthesize speech for bot response
+      // Generate speech for bot response
       try {
-        const audioResponse = await fetch("/api/text-to-speech", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ text: botMessage.content }),
-        });
-        
-        if (audioResponse.ok) {
-          const audioBlob = await audioResponse.blob();
-          const audio = new Audio(URL.createObjectURL(audioBlob));
-          audio.play();
-        }
+        const audioContent = await synthesizeSpeech(botMessage.content);
+        const audioBlob = new Blob([audioContent], { type: 'audio/mp3' });
+        const audio = new Audio(URL.createObjectURL(audioBlob));
+        await audio.play();
       } catch (error) {
         console.error("TTS Error:", error);
         toast.error("Failed to generate speech response");
@@ -83,43 +76,47 @@ export const Chatbot = () => {
 
   const startRecording = async () => {
     try {
-      if (!recognitionRef.current) {
-        recognitionRef.current = new (window.SpeechRecognition || 
-          window.webkitSpeechRecognition)();
-        recognitionRef.current.continuous = false;
-        recognitionRef.current.interimResults = false;
-        recognitionRef.current.lang = 'en-US';
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      audioChunksRef.current = [];
 
-        recognitionRef.current.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          handleSendMessage(transcript);
-        };
+      mediaRecorder.ondataavailable = (event) => {
+        audioChunksRef.current.push(event.data);
+      };
 
-        recognitionRef.current.onerror = (event: any) => {
-          console.error('Speech recognition error:', event.error);
-          toast.error("Failed to recognize speech. Please try again.");
-          setIsRecording(false);
-        };
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        const buffer = await audioBlob.arrayBuffer();
+        
+        try {
+          const transcript = await transcribeSpeech(Buffer.from(buffer));
+          if (transcript) {
+            handleSendMessage(transcript);
+          } else {
+            toast.error("Could not transcribe audio. Please try again.");
+          }
+        } catch (error) {
+          console.error("STT Error:", error);
+          toast.error("Failed to transcribe speech");
+        }
+      };
 
-        recognitionRef.current.onend = () => {
-          setIsRecording(false);
-        };
-      }
-
-      recognitionRef.current.start();
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
       setIsRecording(true);
     } catch (error) {
-      console.error('Speech recognition error:', error);
-      toast.error("Failed to start speech recognition. Please try again.");
+      console.error("Recording error:", error);
+      toast.error("Failed to access microphone. Please check your permissions.");
       setIsRecording(false);
     }
   };
 
   const stopRecording = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
     }
-    setIsRecording(false);
   };
 
   return (
