@@ -3,6 +3,7 @@ import { ChatMessage as ChatMessageType } from "@/types/chat";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
+import { synthesizeSpeech, transcribeSpeech } from "@/api/googleCloud";
 
 const WEBHOOK_URL = "https://hook.eu2.make.com/your-webhook-id";
 
