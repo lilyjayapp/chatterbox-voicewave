@@ -11,7 +11,7 @@ export const Chatbot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recognitionRef = useRef<any>(null);
 
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
@@ -54,6 +54,26 @@ export const Chatbot = () => {
       };
 
       setMessages((prev) => [...prev, botMessage]);
+      
+      // Synthesize speech for bot response
+      try {
+        const audioResponse = await fetch("/api/text-to-speech", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ text: botMessage.content }),
+        });
+        
+        if (audioResponse.ok) {
+          const audioBlob = await audioResponse.blob();
+          const audio = new Audio(URL.createObjectURL(audioBlob));
+          audio.play();
+        }
+      } catch (error) {
+        console.error("TTS Error:", error);
+        toast.error("Failed to generate speech response");
+      }
     } catch (error) {
       toast.error("Failed to send message. Please try again.");
     } finally {
@@ -63,35 +83,43 @@ export const Chatbot = () => {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      const audioChunks: Blob[] = [];
+      if (!recognitionRef.current) {
+        recognitionRef.current = new (window.SpeechRecognition || 
+          window.webkitSpeechRecognition)();
+        recognitionRef.current.continuous = false;
+        recognitionRef.current.interimResults = false;
+        recognitionRef.current.lang = 'en-US';
 
-      mediaRecorder.ondataavailable = (event) => {
-        audioChunks.push(event.data);
-      };
+        recognitionRef.current.onresult = (event: any) => {
+          const transcript = event.results[0][0].transcript;
+          handleSendMessage(transcript);
+        };
 
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
-        // Here you would typically send the audioBlob to a speech-to-text service
-        // For now, we'll just simulate it
-        handleSendMessage("Voice message received");
-      };
+        recognitionRef.current.onerror = (event: any) => {
+          console.error('Speech recognition error:', event.error);
+          toast.error("Failed to recognize speech. Please try again.");
+          setIsRecording(false);
+        };
 
-      mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.start();
+        recognitionRef.current.onend = () => {
+          setIsRecording(false);
+        };
+      }
+
+      recognitionRef.current.start();
       setIsRecording(true);
     } catch (error) {
-      toast.error("Failed to access microphone. Please check your permissions.");
+      console.error('Speech recognition error:', error);
+      toast.error("Failed to start speech recognition. Please try again.");
+      setIsRecording(false);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      mediaRecorderRef.current.stream.getTracks().forEach((track) => track.stop());
+    if (recognitionRef.current) {
+      recognitionRef.current.stop();
     }
+    setIsRecording(false);
   };
 
   return (
