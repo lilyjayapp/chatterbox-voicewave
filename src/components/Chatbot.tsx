@@ -26,17 +26,17 @@ export const Chatbot = () => {
   }, [messages]);
 
   const handleSendMessage = async (content: string) => {
-    const userMessage: ChatMessageType = {
-      id: Date.now().toString(),
-      type: "user",
-      content,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
     try {
+      const userMessage: ChatMessageType = {
+        id: Date.now().toString(),
+        type: "user",
+        content,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, userMessage]);
+      setIsLoading(true);
+
       const response = await fetch(WEBHOOK_URL, {
         method: "POST",
         headers: {
@@ -45,7 +45,9 @@ export const Chatbot = () => {
         body: JSON.stringify({ message: content }),
       });
 
-      if (!response.ok) throw new Error("Failed to get response");
+      if (!response.ok) {
+        throw new Error("Failed to get response");
+      }
 
       const data = await response.json();
       const botMessage: ChatMessageType = {
@@ -57,7 +59,6 @@ export const Chatbot = () => {
 
       setMessages((prev) => [...prev, botMessage]);
       
-      // Use Web Speech API for text-to-speech
       try {
         await synthesizeSpeech(botMessage.content);
       } catch (error) {
@@ -65,6 +66,7 @@ export const Chatbot = () => {
         toast.error("Failed to generate speech response");
       }
     } catch (error) {
+      console.error("Message Error:", error);
       toast.error("Failed to send message. Please try again.");
     } finally {
       setIsLoading(false);
