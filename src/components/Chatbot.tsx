@@ -5,7 +5,7 @@ import { ChatInput } from "./ChatInput";
 import { toast } from "sonner";
 import { synthesizeSpeech, transcribeSpeech } from "@/api/googleCloud";
 
-const WEBHOOK_URL = "VF.DM.67673ddfd3895ccd3358dc84.MEQs18qwiYrzAR3p";
+const WEBHOOK_URL = "https://hook.eu2.make.com/0fd6yuwrhlju7mff5e33mc3xib80pm7y";
 
 export const Chatbot = () => {
   const [messages, setMessages] = useState<ChatMessageType[]>([]);
@@ -67,7 +67,7 @@ export const Chatbot = () => {
       }
     } catch (error) {
       console.error("Message Error:", error);
-      toast.error("Failed to send message to webhook. Please try again.");
+      toast.error("Failed to send message to Make.com webhook. Please try again.");
     } finally {
       setIsLoading(false);
     }
